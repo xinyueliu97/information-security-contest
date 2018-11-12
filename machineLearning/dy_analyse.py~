@@ -1,0 +1,153 @@
+import os
+import sys
+import re
+import json
+from numpy import*
+
+from collections import defaultdict
+
+tags = { 0x1 :   "TAINT_LOCATION",      0x2: "TAINT_CONTACTS",        0x4: "TAINT_MIC",            0x8: "TAINT_PHONE_NUMBER",
+         0x10:   "TAINT_LOCATION_GPS",  0x20: "TAINT_LOCATION_NET",   0x40: "TAINT_LOCATION_LAST", 0x80: "TAINT_CAMERA",
+         0x100:  "TAINT_ACCELEROMETER", 0x200: "TAINT_SMS",           0x400: "TAINT_IMEI",         0x800: "TAINT_IMSI",
+         0x1000: "TAINT_ICCID",         0x2000: "TAINT_DEVICE_SN",    0x4000: "TAINT_ACCOUNT",     0x8000: "TAINT_BROWSER",
+         0x10000: "TAINT_OTHERDB",      0x20000: "TAINT_FILECONTENT", 0x40000: "TAINT_PACKAGE",    0x80000: "TAINT_CALL_LOG",
+         0x100000: "TAINT_EMAIL",       0x200000: "TAINT_CALENDAR",   0x400000: "TAINT_SETTINGS" }
+
+files = {0x1:'/system/xbin', 0x2:'/system/bin', 0x4:'/data/system/accounts.db', 0x8:'/data/data/com.android.providers.contacts/databases/contacts2.db', 0x10:'/data/data/com.android.providers.telephoney/databases/mmssms.db'}
+
+DROIDBOX_PATH = '/home/ubuntu/DroidBox/'
+CURRENT_PATH = os.getcwd()
+all_component = dict() 
+
+def run(filename,duration,count):
+    component = ''
+    tag_component = ''
+    os.chdir(DROIDBOX_PATH)
+    os.system('./droidbox.sh '+filename + ' '+duration)
+    rename = 'mv ./out.json ./output/out'+str(count)+'.json'
+    os.system(rename)
+    outpath = '/home/ubuntu/DroidBox/output/out'+str(count)+'.json'
+    #outpath = '/home/ubuntu/DroidBox/output/out.json'
+    dicList=[json.loads(line) for line in open(outpath)]
+    #print dicList[0]['servicestart']
+    component += feature(dicList[0])
+    #print len(component)
+    component += dataleaks(dicList[0]['dataleaks'])
+    component += accessedfiles(dicList[0]['accessedfiles'])
+    component += sendnet(dicList[0]['sendnet'])
+    return component
+
+
+def batch(path):
+    DROIDBOX_PATH = '/home/ubuntu/DroidBox/'
+    CURRENT_PATH = os.getcwd()
+    i = 0
+    count = 1
+    for path1 in os.listdir(path):
+        full_path = os.path.join(path,path1)
+        extension = os.path.splitext(path1)[1]
+        filename = os.path.splitext(path1)[0]
+        if os.path.isdir(full_path):
+            stack.append(full_path)
+        elif extension == '.apk' or extension == '.APK':
+            fullname = path + filename + extension
+            all_component[i] = run(fullname,'60',count)
+            count = count + 1
+            i = i + 1
+    row = count-1
+    col = len(all_component[0])
+    return Mat(all_component,row,col),i
+
+def dataleaks(diclist):
+    flag = 0
+    global tags
+    tag_component = ''
+    for each in tags:
+        for item in diclist:
+            if tags[each] in diclist[item]['tag']:
+                tag_component += '1'
+                flag = 1
+                break
+        if flag==0 :
+            tag_component += '0'
+        flag = 0   
+    #print tag_component        
+    return tag_component
+
+def accessedfiles(diclist):
+    global files
+    file_component = ''
+    flag = 0
+    for each in files:
+        for item in diclist:
+            if files[each] in diclist[item]:
+                file_component += '1'
+                flag = 1
+                break
+        if flag == 0:
+            file_component += '0'
+        flag = 0
+    #print file_component
+    return file_component
+    
+def sendnet(diclist):
+    global tags
+    send_component = ''
+    flag = 0
+    for each in tags:
+        for item in diclist:
+            if 'tag' in diclist[item]:
+                if tags[each] in diclist[item]['tag']:
+                    send_component += '1'
+                    flag = 1
+                    break
+        if flag==0 :
+            send_component += '0'
+        flag = 0
+    #print send_component
+    return send_component
+
+def feature(diclist):
+    fea_component = ''
+    for each in diclist:
+        print each
+        if  diclist[each]!={} and diclist[each]!=[] :
+            fea_component += '1'
+        else:
+            fea_component += '0'
+    #print fea_component
+    return fea_component
+
+
+def Mat(all_component,row,col):
+    T=zeros((row,col))
+    i = 0
+    for each in all_component:
+        for j in range(0,col-1):
+            T[i,j] = all_component[each][j]
+        #print all_component[each],len(all_component[each])
+        #print T[i],len(T[i])
+        i = i + 1
+    return T
+    
+            
+        
+    
+                      
+    
+        
+
+'''
+def sort(diclist):
+    dic = {'a':31, 'bc':5, 'c':3, 'asd':4, 'aa':74, 'd':0}
+    dic= sorted(dic.iteritems(), key=lambda d:d[0])
+'''
+   
+
+   
+if __name__ == '__main__':
+    path = "/home/ubuntu/DroidBox/apk/"
+    #sort()
+    batch(path)
+    #print run(path,sys.argv[1],sys.argv[2])
+    

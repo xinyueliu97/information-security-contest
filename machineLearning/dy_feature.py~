@@ -1,0 +1,42 @@
+# -*- coding: utf-8 -*-
+
+import sys
+sys.path.append("..")
+
+import os
+import numpy as np
+import pickle
+from dy_analyse import *
+import shutil
+
+
+def DyFeatureExtract():
+        path = "/home/ubuntu/project/apks/apks/ben/"
+
+        shutil.rmtree('/home/ubuntu/DroidBox/output')  
+	os.mkdir('/home/ubuntu/DroidBox/output')
+    	dy_feature_matrix,ben_app_num= batch(path)
+        
+        pickle.dump(dy_feature_matrix, open('/home/ubuntu/Code/dataset/dy_feature/dy_feature_matrix_1', 'wb'))  # 固化特征矩阵
+	shutil.rmtree('/home/ubuntu/DroidBox/output')  
+	os.mkdir('/home/ubuntu/DroidBox/output')        
+
+        path = "/home/ubuntu/project/apks/apks/mal/"
+    	dy_feature_matrix,mal_app_num= batch(path)
+        
+        pickle.dump(dy_feature_matrix, open('/home/ubuntu/Code/dataset/dy_feature/dy_feature_matrix_2', 'wb'))  # 固化特征矩阵
+
+   
+	allcount = mal_app_num + ben_app_num
+        print "per feature extract ,count %d" % allcount
+        print "ben app count %d" % ben_app_num
+        classification = np.ones(allcount, dtype=np.int)  # 分类结果
+        for i in range(ben_app_num):
+            classification[i] = 0
+        pickle.dump(classification, open('/home/ubuntu/ApkGo/ApkGo/dataset/dy_classification', 'wb'))  # 固化分类结果
+
+
+if __name__ == '__main__': 
+    DyFeatureExtract()
+
+

@@ -1,0 +1,204 @@
+# -*- coding: utf-8 -*-
+import xml.etree.ElementTree as ET
+from collections import defaultdict
+import os
+import re
+import csv
+import binascii
+from numpy import*
+import pickle
+
+
+#output the node_decode file		
+def _component_extract(decode_path,writepath):
+    all_component = dict()
+    all_edges = dict()
+    s_packlist = _init_table()
+    gephi = '{http://www.gephi.org/gexf}' 
+    root = ET.parse(decode_path).getroot()
+    #print root
+    
+    #all_component['nodes'] = defaultdict(list)
+    all_component = defaultdict(list)
+    all_edges = defaultdict(list)
+    for graph in root.findall(gephi+'graph'):
+        for nodes in graph.findall(gephi +'nodes'):
+            for node in nodes.findall(gephi+'node'):
+                id = str(node.get('id'))
+                #label = node.get('label')
+                for attvalues in node.findall(gephi+'attvalues'):
+                    for attvalue in attvalues.findall(gephi+'attvalue'):
+                        aid = attvalue.get('id')
+                        if (aid=='3'):
+                            value = attvalue.get('value')
+			    v_decode = value_decode(value,s_packlist)
+                            #print value
+                            all_component[id].append(v_decode)
+			    all_component[id] = clean(all_component[id])
+			    #print all_component[id]
+         
+        for edges in graph.findall(gephi+'edges'):
+            for edge in edges.findall(gephi+'edge'):
+                 source = edge.get('source')
+                 target = edge.get('target')
+                 target_code = all_component[source]
+                 all_edges[source].append(target_code)
+                 #print all_edges[source]
+        
+        neighbor(all_edges) 
+        f= open (writepath,'w')	
+        for x in all_component:
+            if x in all_edges:
+                so = all_component[x]
+                so = str(so)
+                #print so
+                so = dot1(so)
+                #print so,temp
+                all_component[x] = xor(so,all_edges[x])		
+		if all_component[x]!='00000000000' :
+		    print >>f,all_component[x]
+	
+                                
+    return all_component
+
+def clean(so):
+    so = str(so)
+    so = ''.join(so.split('['))
+    so = ''.join(so.split(']'))
+    so = ''.join(so.split('\''))
+    return so
+
+def xor(a,b):
+    x = 0
+    y = ''
+    for x in range(0,len(a)):
+        temp = int(a[x:x+1]) ^ int(b[x:x+1])
+        temp = str(temp)
+        y = y + temp
+    return y
+
+def neighbor(lis):
+    for x in lis:
+        result = '00000000000'
+        for y in lis[x]:	    
+            y = str(y)
+            result = xor(result,str(y))
+        lis[x] = result
+
+def dot1(a):
+    b = ''
+    temp = a[0:1]
+    b=a[1:len(a)]+temp
+    return b
+
+def _init_table():
+    pack_list = []
+    with open('/home/ubuntu/Code/data/sensitive_package.csv') as f:
+        f_csv = csv.reader(f)
+        for row in f_csv:
+            if row[0] != 'Packname':
+                pack_list.append(row[0].strip())
+    return pack_list
+
+def value_decode(value,s_packlist):
+    decode = ''
+    for each_pack in s_packlist:
+	if (value.upper().find(each_pack.upper())!=-1):
+	    decode = decode + '1'
+	else:
+	    decode = decode + '0'
+    return decode
+
+def kernal_G(filename1,filename2):
+    g1 = read_Graph(filename1)  
+    g2 = read_Graph(filename2)   
+    count = 0
+    for a in g1:	
+	if a!='00000000000' and a!='[\'00000000000\']':
+	    for b in g2:
+		b = str(b)
+		if a == b:
+		    count = count + 1
+    return count
+
+#read the node_decode file
+def read_Graph(fileName):
+    data1 = []
+    file = open(fileName,'r')
+    for eachLine in file:
+	(tmp1,tmp2) = eachLine.split('\n',1)
+	data1.append(tmp1)
+    return data1
+
+#apk to gexf
+def output_gexf(apk_list,gexfpath,count):
+    undone_apk_list = apk_list
+    for path1 in apk_list:
+	count = count + 1
+	cmd = '/home/ubuntu/androguard-2.0/androgexf.py -i '+path1+' -o '+gexfpath +'/graph'+str(count)+'.gexf'
+	print cmd
+	if os.system(cmd)!=0:
+	    count = count - 1
+    return count
+	  
+	
+
+#gexf to output
+def output_graph(gexfpath,wdirpath):    
+    for path1 in os.listdir(gexfpath):
+	full_path = os.path.join(gexfpath,path1)
+	filename =  os.path.splitext(path1)[0]
+	count = filename.split('graph')[1]
+	writefile = wdirpath+count
+	print full_path,writefile
+	_component_extract(full_path,writefile)
+
+def find_all_app(apk_path,apktype):
+    app_list = []
+    filetype = [".APK",".apk"]
+    full_path = apk_path+apktype
+    stack = list()
+    stack.append(full_path)
+    while len(stack) > 0:
+        path = stack.pop()
+        # each file or folder in ben_code/
+        for each in os.listdir(path):
+            # absolute path
+            each_path = os.path.join(path, each)
+            # is folder?
+            if os.path.isdir(each_path):
+                stack.append(each_path)
+	    else:
+		if os.path.splitext(each_path)[1] in filetype:
+		    app_list.append(each_path)
+		    print each_path
+
+    pickle.dump(app_list, open('/home/ubuntu/Code/dataset/app_list_%s' % apktype, 'wb'))
+    #print '[+]app count:%d' % len(app_list)
+    return app_list
+    
+
+def get_graph_decode():
+    #apk(ben,mal)path
+    apk_path = "/home/ubuntu/Code/dataset/apkfile/"
+    #gexf
+    gexfpath = '/home/ubuntu/Code/dataset/graphfile'
+    #decode
+    wdirpath = '/home/ubuntu/Code/dataset/decodefile1/decode'
+
+    find_all_app(apk_path,"ben")
+    find_all_app(apk_path,"mal")
+    ben_list = pickle.load(open('/home/ubuntu/Code/dataset/app_list_ben', 'rb'))
+    mal_list = pickle.load(open('/home/ubuntu/Code/dataset/app_list_mal', 'rb'))
+    ben_count = output_gexf(ben_list,gexfpath,0)
+    mal_count = output_gexf(mal_list,gexfpath,ben_count)-ben_count
+    output_graph(gexfpath,wdirpath)
+    return ben_count,mal_count
+
+
+   
+    
+
+
+
+
